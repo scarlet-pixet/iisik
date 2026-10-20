@@ -1,0 +1,10 @@
+FROM python:3.13-slim
+WORKDIR /app
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+COPY requirements.lab5.txt ./
+RUN pip install --no-cache-dir -r requirements.lab5.txt
+COPY back/lab3 back/lab3
+COPY back/lab4 back/lab4
+COPY back/lab5 back/lab5
+COPY front/lab5_app.py front/lab5_app.py
+COPY docs/lab3/demo_ids.json docs/lab3/demo_ids.json

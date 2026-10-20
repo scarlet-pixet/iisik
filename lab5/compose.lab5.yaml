@@ -1,0 +1,148 @@
+name: iisik-lab5
+services:
+  auth-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bank_auth
+      POSTGRES_USER: bank_auth
+      POSTGRES_PASSWORD: ${LAB5_DB_PASSWORD:?Run tools/init_lab5.py and use --env-file .env.lab5}
+    ports: ["127.0.0.1:57531:5432"]
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+      - ./back/migrations/auth/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro
+      - ./back/migrations/auth/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank_auth -d bank_auth"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  transaction-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bank_transaction
+      POSTGRES_USER: bank_transaction
+      POSTGRES_PASSWORD: ${LAB5_DB_PASSWORD}
+    ports: ["127.0.0.1:57532:5432"]
+    volumes:
+      - transaction-data:/var/lib/postgresql/data
+      - ./back/migrations/transaction/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro
+      - ./back/migrations/transaction/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro
+      - ./infra/lab5/transaction/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank_transaction -d bank_transaction"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  analysis-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bank_analysis
+      POSTGRES_USER: bank_analysis
+      POSTGRES_PASSWORD: ${LAB5_DB_PASSWORD}
+    ports: ["127.0.0.1:57533:5432"]
+    volumes:
+      - analysis-data:/var/lib/postgresql/data
+      - ./back/migrations/analysis/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro
+      - ./back/migrations/analysis/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro
+      - ./infra/lab5/analysis/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank_analysis -d bank_analysis"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  case-db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bank_case
+      POSTGRES_USER: bank_case
+      POSTGRES_PASSWORD: ${LAB5_DB_PASSWORD}
+    ports: ["127.0.0.1:57534:5432"]
+    volumes:
+      - case-data:/var/lib/postgresql/data
+      - ./back/migrations/case/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro
+      - ./back/migrations/case/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro
+      - ./infra/lab5/case/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank_case -d bank_case"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7.4-alpine
+    environment:
+      LAB5_REDIS_PASSWORD: ${LAB5_REDIS_PASSWORD:?Run tools/init_lab5.py and use --env-file .env.lab5}
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$LAB5_REDIS_PASSWORD\""]
+    ports: ["127.0.0.1:57579:6379"]
+    volumes: ["redis-data:/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$LAB5_REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  auth-service:
+    build:
+      context: .
+      dockerfile: Dockerfile.lab5
+    image: bank-lab5-python:local
+    command: ["uvicorn", "back.lab5.auth.api:app", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      LAB5_AUTH_DSN: postgresql://bank_auth:${LAB5_DB_PASSWORD}@auth-db:5432/bank_auth
+      LAB5_REDIS_URL: redis://:${LAB5_REDIS_PASSWORD}@redis:6379/0
+      LAB5_JWT_SECRET: ${LAB5_JWT_SECRET:?Run tools/init_lab5.py and use --env-file .env.lab5}
+      LAB5_SESSION_TTL: "1800"
+    ports: ["127.0.0.1:18015:8001"]
+    depends_on:
+      auth-db: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8001/health', timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  gateway:
+    image: bank-lab5-python:local
+    command: ["uvicorn", "back.lab5.graphql:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      LAB5_AUTH_URL: http://auth-service:8001
+      LAB5_TRANSACTION_DSN: postgresql://bank_transaction:${LAB5_DB_PASSWORD}@transaction-db:5432/bank_transaction
+      LAB5_ANALYSIS_DSN: postgresql://bank_analysis:${LAB5_DB_PASSWORD}@analysis-db:5432/bank_analysis
+      LAB5_CASE_DSN: postgresql://bank_case:${LAB5_DB_PASSWORD}@case-db:5432/bank_case
+    ports: ["127.0.0.1:18005:8000"]
+    depends_on:
+      auth-service: {condition: service_healthy}
+      transaction-db: {condition: service_healthy}
+      analysis-db: {condition: service_healthy}
+      case-db: {condition: service_healthy}
+
+  frontend:
+    image: bank-lab5-python:local
+    command: ["streamlit", "run", "front/lab5_app.py", "--server.address", "0.0.0.0", "--server.port", "8501", "--browser.gatherUsageStats", "false"]
+    environment:
+      LAB5_GRAPHQL_URL: http://gateway:8000/graphql
+    ports: ["127.0.0.1:18505:8501"]
+    depends_on: [gateway]
+
+  pgadmin:
+    image: dpage/pgadmin4:9.8
+    environment:
+      PGADMIN_DEFAULT_EMAIL: lab5@example.com
+      PGADMIN_DEFAULT_PASSWORD: ${LAB5_PGADMIN_PASSWORD:?Run tools/init_lab5.py and use --env-file .env.lab5}
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    ports: ["127.0.0.1:18085:80"]
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+      - ./infra/lab5/servers.json:/pgadmin4/servers.json:ro
+
+volumes:
+  auth-data: {}
+  transaction-data: {}
+  analysis-data: {}
+  case-data: {}
+  redis-data: {}
+  pgadmin-data: {}

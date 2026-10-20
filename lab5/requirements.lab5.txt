@@ -1,0 +1,11 @@
+strawberry-graphql==0.331.6
+fastapi==0.142.2
+uvicorn==0.54.0
+psycopg==3.3.6
+psycopg-binary==3.3.6
+streamlit==1.65.0
+graphql-core==3.3.0
+pytest==9.1.1
+PyJWT==2.15.1
+redis==8.1.0
+requests==2.32.5
