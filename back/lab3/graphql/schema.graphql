@@ -1,0 +1,284 @@
+type Account {
+  id: ID!
+  clientId: ID!
+  externalId: String!
+  currency: String!
+  status: String!
+}
+
+type AnalysisResult {
+  id: ID!
+  transactionId: ID!
+  runId: ID!
+  profileId: ID
+  score: Int!
+  threshold: Int!
+  dataStatus: String!
+  hits: [RuleHit!]!
+  missingReasons: [String!]!
+  calculatedAt: DateTime!
+}
+
+type AnalysisRun {
+  id: ID!
+  mode: String!
+  status: String!
+  counters: JSON!
+  createdAt: DateTime!
+  completedAt: DateTime
+}
+
+type BehaviorProfile {
+  id: ID!
+  runId: ID!
+  clientId: ID!
+  currency: String!
+  direction: Direction!
+  windowStart: DateTime!
+  windowEnd: DateTime!
+  cutoffTransactionId: ID
+  ingestedBefore: DateTime!
+  sampleSize: Int!
+  medianAmount: Decimal
+  madAmount: Decimal
+  metrics: JSON!
+  dataStatus: String!
+}
+
+type CaseComment {
+  id: ID!
+  authorId: ID!
+  kind: String!
+  text: String!
+  createdAt: DateTime!
+}
+
+type CaseDecision {
+  id: ID!
+  authorId: ID!
+  reviewCycle: Int!
+  outcome: CaseOutcome!
+  reason: String!
+  decidedAt: DateTime!
+}
+
+input CaseFilter {
+  status: CaseStatus = null
+  priority: Priority = null
+  assigneeId: ID = null
+  clientId: ID = null
+  period: PeriodInput = null
+}
+
+enum CaseOutcome {
+  UNUSUAL_CONFIRMED
+  EXPLAINED
+}
+
+type CasePage {
+  items: [ReviewCase!]!
+  nextCursor: String
+  totalCount: Int!
+}
+
+enum CaseStatus {
+  NEW
+  ASSIGNED
+  IN_PROGRESS
+  ESCALATED
+  CLOSED
+}
+
+type Client {
+  id: ID!
+  externalId: String!
+  displayName: String!
+  segment: String
+  isActive: Boolean!
+  accounts: [Account!]!
+}
+
+type ClientActivity {
+  client: Client!
+  currency: String!
+  transactions: [Transaction!]!
+  profiles: [BehaviorProfile!]!
+  scoreDistribution: JSON!
+  partialErrors: [String!]!
+}
+
+input ClientFilter {
+  externalId: String = null
+  segment: String = null
+  isActive: Boolean = null
+}
+
+type ClientPage {
+  items: [Client!]!
+  nextCursor: String
+  totalCount: Int!
+}
+
+"""Date with time (isoformat)"""
+scalar DateTime
+
+"""Decimal (fixed-point)"""
+scalar Decimal
+
+enum Direction {
+  IN
+  OUT
+}
+
+"""
+The `JSON` scalar type represents JSON values as specified by [ECMA-404](https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf).
+"""
+scalar JSON @specifiedBy(url: "https://ecma-international.org/wp-content/uploads/ECMA-404_2nd_edition_december_2017.pdf")
+
+type Notification {
+  id: ID!
+  caseId: ID
+  type: String!
+  createdAt: DateTime!
+  readAt: DateTime
+}
+
+type NotificationPage {
+  items: [Notification!]!
+  nextCursor: String
+  totalCount: Int!
+}
+
+input PageInput {
+  limit: Int! = 20
+  cursor: String = null
+  sortBy: String = null
+  sortDirection: String = null
+}
+
+input PeriodInput {
+  from: DateTime!
+  to: DateTime!
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+type Query {
+  me: User!
+  clients(filter: ClientFilter = null, page: PageInput = null): ClientPage!
+  transactions(filter: TransactionFilter = null, page: PageInput = null): TransactionPage!
+  transaction(id: ID!): Transaction
+  clientActivity(clientId: ID!, period: PeriodInput!, currency: String!, runId: ID!): ClientActivity!
+  profile(id: ID!): BehaviorProfile
+  analysisResult(id: ID!): AnalysisResult
+  analysisRun(id: ID!): AnalysisRun
+  compareRuns(firstId: ID!, secondId: ID!): RunComparison!
+  ruleVersions(ruleId: ID!): [RuleVersion!]!
+  reviewCases(filter: CaseFilter = null, page: PageInput = null): CasePage!
+  reviewCase(id: ID!): ReviewCase
+  report(id: ID!): Report
+  exportReport(id: ID!): ReportExport!
+  notifications(unreadOnly: Boolean = null, page: PageInput = null): NotificationPage!
+}
+
+type Report {
+  id: ID!
+  periodStart: DateTime!
+  periodEnd: DateTime!
+  filters: JSON!
+  snapshot: JSON!
+  createdAt: DateTime!
+}
+
+type ReportExport {
+  fileName: String!
+  mediaType: String!
+  contentBase64: String!
+}
+
+type ReviewCase {
+  id: ID!
+  transactionId: ID!
+  clientId: ID!
+  latestResultId: ID!
+  latestScore: Int!
+  status: CaseStatus!
+  priority: Priority!
+  assigneeId: ID
+  reviewCycle: Int!
+  rowVersion: Int!
+  comments: [CaseComment!]!
+  decisions: [CaseDecision!]!
+}
+
+enum RoleCode {
+  ADMIN
+  ANALYST
+  MANAGER
+}
+
+type RuleHit {
+  ruleCode: String!
+  version: Int!
+  featureValue: JSON!
+  limitValue: JSON!
+  contribution: Int!
+}
+
+type RuleVersion {
+  id: ID!
+  ruleId: ID!
+  version: Int!
+  weight: Int!
+  parameters: JSON!
+  status: String!
+  publishedAt: DateTime
+}
+
+type RunComparison {
+  commonCount: Int!
+  onlyFirstCount: Int!
+  onlySecondCount: Int!
+  changedScores: JSON!
+  newHits: JSON!
+}
+
+type Transaction {
+  id: ID!
+  externalId: String!
+  source: String!
+  clientId: ID!
+  accountId: ID!
+  counterpartyId: ID
+  amount: Decimal!
+  currency: String!
+  direction: Direction!
+  occurredAt: DateTime!
+  ingestedAt: DateTime!
+}
+
+input TransactionFilter {
+  clientId: ID = null
+  period: PeriodInput = null
+  currency: String = null
+  amountFrom: Decimal = null
+  amountTo: Decimal = null
+  direction: Direction = null
+}
+
+type TransactionPage {
+  items: [Transaction!]!
+  nextCursor: String
+  totalCount: Int!
+}
+
+type User {
+  id: ID!
+  login: String!
+  role: RoleCode!
+  isActive: Boolean!
+}

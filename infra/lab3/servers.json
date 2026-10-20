@@ -1,0 +1,40 @@
+{
+  "Servers": {
+    "1": {
+      "Name": "Auth Service LR3",
+      "Group": "Bank Lab 3",
+      "Host": "auth-db",
+      "Port": 5432,
+      "MaintenanceDB": "bank_auth",
+      "Username": "bank_auth_reader",
+      "SSLMode": "prefer"
+    },
+    "2": {
+      "Name": "Transaction Service LR3",
+      "Group": "Bank Lab 3",
+      "Host": "transaction-db",
+      "Port": 5432,
+      "MaintenanceDB": "bank_transaction",
+      "Username": "bank_transaction_reader",
+      "SSLMode": "prefer"
+    },
+    "3": {
+      "Name": "Analysis Service LR3",
+      "Group": "Bank Lab 3",
+      "Host": "analysis-db",
+      "Port": 5432,
+      "MaintenanceDB": "bank_analysis",
+      "Username": "bank_analysis_reader",
+      "SSLMode": "prefer"
+    },
+    "4": {
+      "Name": "Case Service LR3",
+      "Group": "Bank Lab 3",
+      "Host": "case-db",
+      "Port": 5432,
+      "MaintenanceDB": "bank_case",
+      "Username": "bank_case_reader",
+      "SSLMode": "prefer"
+    }
+  }
+}
