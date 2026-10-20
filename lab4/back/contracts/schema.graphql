@@ -1,0 +1,94 @@
+"""Money as an exact decimal string; no IEEE-754 float."""
+scalar Decimal
+scalar DateTime
+scalar JSON
+enum RoleCode { ADMIN ANALYST MANAGER }
+enum Direction { IN OUT }
+enum CaseOutcome { UNUSUAL_CONFIRMED EXPLAINED }
+enum CaseStatus { NEW ASSIGNED IN_PROGRESS ESCALATED CLOSED }
+enum Priority { LOW MEDIUM HIGH }
+type User { id: ID! login: String! role: RoleCode! isActive: Boolean! }
+type AuthPayload { accessToken: String! expiresAt: DateTime! user: User! }
+type Client { id: ID! externalId: String! displayName: String! segment: String isActive: Boolean! accounts: [Account!]! }
+type Account { id: ID! clientId: ID! externalId: String! currency: String! status: String! }
+type Counterparty { id: ID! externalId: String! displayName: String! category: String }
+type Transaction { id: ID! externalId: String! source: String! clientId: ID! accountId: ID! counterpartyId: ID amount: Decimal! currency: String! direction: Direction! occurredAt: DateTime! ingestedAt: DateTime! }
+type ImportError { row: Int! code: String! message: String! }
+type ImportResult { batchId: ID! status: String! receivedCount: Int! newCount: Int! duplicateCount: Int! errors: [ImportError!]! }
+type BehaviorProfile { id: ID! runId: ID! clientId: ID! currency: String! direction: Direction! windowStart: DateTime! windowEnd: DateTime! cutoffTransactionId: ID ingestedBefore: DateTime! sampleSize: Int! medianAmount: Decimal madAmount: Decimal metrics: JSON! dataStatus: String! }
+type RuleHit { ruleCode: String! version: Int! featureValue: JSON! limitValue: JSON! contribution: Int! }
+type AnalysisResult { id: ID! transactionId: ID! runId: ID! profileId: ID score: Int! threshold: Int! dataStatus: String! hits: [RuleHit!]! missingReasons: [String!]! calculatedAt: DateTime! }
+type AnalysisRun { id: ID! mode: String! status: String! counters: JSON! createdAt: DateTime! completedAt: DateTime }
+type RunComparison { commonCount: Int! onlyFirstCount: Int! onlySecondCount: Int! changedScores: JSON! newHits: JSON! }
+type RuleVersion { id: ID! ruleId: ID! version: Int! weight: Int! parameters: JSON! status: String! publishedAt: DateTime }
+type CaseComment { id: ID! authorId: ID! kind: String! text: String! createdAt: DateTime! }
+type CaseDecision { id: ID! authorId: ID! reviewCycle: Int! outcome: CaseOutcome! reason: String! decidedAt: DateTime! }
+type ReviewCase { id: ID! transactionId: ID! clientId: ID! latestResultId: ID! latestScore: Int! status: CaseStatus! priority: Priority! assigneeId: ID reviewCycle: Int! rowVersion: Int! comments: [CaseComment!]! decisions: [CaseDecision!]! }
+type Report { id: ID! periodStart: DateTime! periodEnd: DateTime! filters: JSON! snapshot: JSON! createdAt: DateTime! }
+type Notification { id: ID! caseId: ID type: String! createdAt: DateTime! readAt: DateTime }
+type ClientActivity { client: Client! currency: String! transactions: [Transaction!]! profiles: [BehaviorProfile!]! scoreDistribution: JSON! partialErrors: [String!]! }
+type DistributionResult { assignedCount: Int! unassignedCount: Int! assignments: JSON! }
+type ReportExport { fileName: String! mediaType: String! contentBase64: String! }
+type ClientPage { items: [Client!]! nextCursor: String totalCount: Int! }
+type TransactionPage { items: [Transaction!]! nextCursor: String totalCount: Int! }
+type CasePage { items: [ReviewCase!]! nextCursor: String totalCount: Int! }
+type NotificationPage { items: [Notification!]! nextCursor: String totalCount: Int! }
+input PeriodInput { from: DateTime! to: DateTime! }
+input PageInput { limit: Int! = 20 cursor: String sortBy: String sortDirection: String }
+input ClientFilter { externalId: String segment: String isActive: Boolean }
+input StaffInput { login: String! password: String! roleCode: RoleCode! idempotencyKey: String! }
+input ClientInput { externalId: String! displayName: String! segment: String idempotencyKey: String! }
+input AccountInput { clientId: ID! externalId: String! currency: String! idempotencyKey: String! }
+input CounterpartyInput { externalId: String! displayName: String! category: String idempotencyKey: String! }
+input TransactionInput { source: String! externalId: String! accountId: ID! counterpartyId: ID amount: Decimal! currency: String! direction: Direction! occurredAt: DateTime! idempotencyKey: String! }
+input ImportBatchInput { fileHash: String! items: [TransactionInput!]! idempotencyKey: String! }
+input ProfileInput { clientId: ID! currency: String! direction: Direction! cutoff: DateTime! idempotencyKey: String! }
+input ReanalysisInput { period: PeriodInput! clientId: ID ruleVersionIds: [ID!]! idempotencyKey: String! }
+input RuleVersionInput { ruleId: ID! version: Int! parameters: JSON! weight: Int! controlExamples: JSON! idempotencyKey: String! }
+input CaseDecisionInput { caseId: ID! outcome: CaseOutcome! reason: String! expectedVersion: Int! idempotencyKey: String! }
+input CaseCommentInput { caseId: ID! text: String! idempotencyKey: String! }
+input DistributionInput { limit: Int! idempotencyKey: String! }
+input CaseFilter { status: CaseStatus priority: Priority assigneeId: ID clientId: ID period: PeriodInput }
+input TransactionFilter { clientId: ID period: PeriodInput currency: String amountFrom: Decimal amountTo: Decimal direction: Direction }
+input ReportInput { period: PeriodInput! outcome: CaseOutcome assigneeId: ID idempotencyKey: String! }
+type Query {
+  me: User!
+  clients(filter: ClientFilter, page: PageInput): ClientPage!
+  transactions(filter: TransactionFilter, page: PageInput): TransactionPage!
+  transaction(id: ID!): Transaction
+  clientActivity(clientId: ID!, period: PeriodInput!, currency: String!, runId: ID!): ClientActivity!
+  profile(id: ID!): BehaviorProfile
+  analysisResult(id: ID!): AnalysisResult
+  analysisRun(id: ID!): AnalysisRun
+  compareRuns(firstId: ID!, secondId: ID!): RunComparison!
+  ruleVersions(ruleId: ID!): [RuleVersion!]!
+  reviewCases(filter: CaseFilter, page: PageInput): CasePage!
+  reviewCase(id: ID!): ReviewCase
+  report(id: ID!): Report
+  exportReport(id: ID!): ReportExport!
+  notifications(unreadOnly: Boolean, page: PageInput): NotificationPage!
+}
+type Mutation {
+  signIn(login: String!, password: String!): AuthPayload!
+  signOut: Boolean!
+  registerStaff(input: StaffInput!): User!
+  blockStaff(userId: ID!, idempotencyKey: String!): User!
+  changeStaffRole(userId: ID!, roleCode: RoleCode!, idempotencyKey: String!): User!
+  createClient(input: ClientInput!): Client!
+  openAccount(input: AccountInput!): Account!
+  registerCounterparty(input: CounterpartyInput!): Counterparty!
+  importTransactions(input: ImportBatchInput!): ImportResult!
+  registerTransaction(input: TransactionInput!): Transaction!
+  buildProfile(input: ProfileInput!): AnalysisRun!
+  analyzeTransaction(transactionId: ID!, idempotencyKey: String!): AnalysisRun!
+  publishRuleVersion(input: RuleVersionInput!): RuleVersion!
+  reanalyzePeriod(input: ReanalysisInput!): AnalysisRun!
+  distributeCases(input: DistributionInput!): DistributionResult!
+  takeCase(caseId: ID!, expectedVersion: Int!, idempotencyKey: String!): ReviewCase!
+  addCaseComment(input: CaseCommentInput!): ReviewCase!
+  escalateCase(caseId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): ReviewCase!
+  closeCase(input: CaseDecisionInput!): ReviewCase!
+  reopenCase(caseId: ID!, reason: String!, expectedVersion: Int!, idempotencyKey: String!): ReviewCase!
+  createReport(input: ReportInput!): Report!
+  markNotificationRead(id: ID!): Notification!
+}

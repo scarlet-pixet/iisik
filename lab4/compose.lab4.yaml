@@ -1,0 +1,193 @@
+{
+  "name": "bank-lab4",
+  "services": {
+    "auth-db": {
+      "image": "postgres:17-alpine",
+      "environment": {
+        "POSTGRES_DB": "bank_auth",
+        "POSTGRES_USER": "bank_auth",
+        "POSTGRES_PASSWORD": "lab4_owner_only"
+      },
+      "ports": [
+        "127.0.0.1:57431:5432"
+      ],
+      "volumes": [
+        "auth-data:/var/lib/postgresql/data",
+        "./back/migrations/auth/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro",
+        "./back/migrations/auth/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro",
+        "./infra/lab4/auth/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U bank_auth -d bank_auth"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      }
+    },
+    "transaction-db": {
+      "image": "postgres:17-alpine",
+      "environment": {
+        "POSTGRES_DB": "bank_transaction",
+        "POSTGRES_USER": "bank_transaction",
+        "POSTGRES_PASSWORD": "lab4_owner_only"
+      },
+      "ports": [
+        "127.0.0.1:57432:5432"
+      ],
+      "volumes": [
+        "transaction-data:/var/lib/postgresql/data",
+        "./back/migrations/transaction/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro",
+        "./back/migrations/transaction/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro",
+        "./infra/lab4/transaction/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U bank_transaction -d bank_transaction"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      }
+    },
+    "analysis-db": {
+      "image": "postgres:17-alpine",
+      "environment": {
+        "POSTGRES_DB": "bank_analysis",
+        "POSTGRES_USER": "bank_analysis",
+        "POSTGRES_PASSWORD": "lab4_owner_only"
+      },
+      "ports": [
+        "127.0.0.1:57433:5432"
+      ],
+      "volumes": [
+        "analysis-data:/var/lib/postgresql/data",
+        "./back/migrations/analysis/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro",
+        "./back/migrations/analysis/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro",
+        "./infra/lab4/analysis/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U bank_analysis -d bank_analysis"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      }
+    },
+    "case-db": {
+      "image": "postgres:17-alpine",
+      "environment": {
+        "POSTGRES_DB": "bank_case",
+        "POSTGRES_USER": "bank_case",
+        "POSTGRES_PASSWORD": "lab4_owner_only"
+      },
+      "ports": [
+        "127.0.0.1:57434:5432"
+      ],
+      "volumes": [
+        "case-data:/var/lib/postgresql/data",
+        "./back/migrations/case/001_initial.sql:/docker-entrypoint-initdb.d/001.sql:ro",
+        "./back/migrations/case/002_demo.sql:/docker-entrypoint-initdb.d/002.sql:ro",
+        "./infra/lab4/case/003_read_fixtures.sql:/docker-entrypoint-initdb.d/003.sql:ro"
+      ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U bank_case -d bank_case"
+        ],
+        "interval": "3s",
+        "timeout": "3s",
+        "retries": 30
+      }
+    },
+    "gateway": {
+      "build": {
+        "context": ".",
+        "dockerfile": "Dockerfile.lab4"
+      },
+      "image": "bank-lab4-python:local",
+      "command": [
+        "uvicorn",
+        "back.lab4.graphql:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000"
+      ],
+      "environment": {
+        "LAB4_TRANSPORT": "mock",
+        "LAB4_AUTH_DSN": "postgresql://bank_auth:lab4_owner_only@auth-db:5432/bank_auth",
+        "LAB4_TRANSACTION_DSN": "postgresql://bank_transaction:lab4_owner_only@transaction-db:5432/bank_transaction",
+        "LAB4_ANALYSIS_DSN": "postgresql://bank_analysis:lab4_owner_only@analysis-db:5432/bank_analysis",
+        "LAB4_CASE_DSN": "postgresql://bank_case:lab4_owner_only@case-db:5432/bank_case"
+      },
+      "ports": [
+        "127.0.0.1:18004:8000"
+      ],
+      "depends_on": {
+        "auth-db": {
+          "condition": "service_healthy"
+        },
+        "transaction-db": {
+          "condition": "service_healthy"
+        },
+        "analysis-db": {
+          "condition": "service_healthy"
+        },
+        "case-db": {
+          "condition": "service_healthy"
+        }
+      }
+    },
+    "frontend": {
+      "image": "bank-lab4-python:local",
+      "command": [
+        "streamlit",
+        "run",
+        "front/lab4_app.py",
+        "--server.address",
+        "0.0.0.0",
+        "--server.port",
+        "8501",
+        "--browser.gatherUsageStats",
+        "false"
+      ],
+      "environment": {
+        "LAB4_GRAPHQL_URL": "http://gateway:8000/graphql"
+      },
+      "ports": [
+        "127.0.0.1:18504:8501"
+      ],
+      "depends_on": [
+        "gateway"
+      ]
+    },
+    "pgadmin": {
+      "image": "dpage/pgadmin4:9.8",
+      "environment": {
+        "PGADMIN_DEFAULT_EMAIL": "lab4@example.com",
+        "PGADMIN_DEFAULT_PASSWORD": "Lab4-admin-2026!",
+        "PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED": "False"
+      },
+      "ports": [
+        "127.0.0.1:18084:80"
+      ],
+      "volumes": [
+        "pgadmin-data:/var/lib/pgadmin",
+        "./infra/lab4/servers.json:/pgadmin4/servers.json:ro"
+      ]
+    }
+  },
+  "volumes": {
+    "auth-data": {},
+    "transaction-data": {},
+    "analysis-data": {},
+    "case-data": {},
+    "pgadmin-data": {}
+  }
+}
